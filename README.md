@@ -1,2 +1,79 @@
-[![Review Assignment Due Date](https://classroom.github.com/assets/deadline-readme-button-22041afd0340ce965d47ae6ef1cefeee28c7c493a6346c4f15d667ab976d596c.svg)](https://classroom.github.com/a/XlSdAUjg)
-[![Open in Visual Studio Code](https://classroom.github.com/assets/open-in-vscode-2e0aaae1b6195c2367325f4f02e2d04e9abb55f0b24a779b69b11b9e10269abc.svg)](https://classroom.github.com/online_ide?assignment_repo_id=22680135&assignment_repo_type=AssignmentRepo)
+# 🎨 Blockchain Art Registry
+
+A decentralized application (DApp) for registering and verifying digital artwork ownership using blockchain and IPFS.
+
+---
+
+## 🚀 Features
+
+* Register artwork on blockchain
+* Store file hashes via IPFS
+* Verify ownership securely
+* MetaMask wallet integration
+
+---
+
+## 🛠 Tech Stack
+
+* Solidity (Smart Contracts)
+* Hardhat (Development & Testing)
+* React + Vite (Frontend)
+* Ethers.js (Blockchain Interaction)
+* IPFS (Storage)
+
+---
+
+## 📦 Setup & Run
+
+```bash
+# Install dependencies
+npm install
+cd frontend && npm install && cd ..
+
+# Compile contracts
+npx hardhat compile
+
+# Start local blockchain
+npx hardhat node
+
+# Deploy contract (new terminal)
+npx hardhat run scripts/deploy.js --network localhost
+
+# Run frontend
+cd frontend && npm run dev
+```
+
+---
+
+## 🔐 Environment Variables
+
+Create a `.env` file in root:
+
+```
+PRIVATE_KEY=your_private_key
+RPC_URL=your_rpc_url
+```
+
+---
+
+## 📁 Project Structure
+
+```
+contracts/   → Smart contracts  
+scripts/     → Deployment scripts  
+test/        → Unit tests  
+frontend/    → React application  
+```
+
+---
+
+## 👨‍💻 Author
+
+Aditya Singh
+B.Tech CSE (Blockchain Technology), VIT Vellore
+
+---
+
+## 📜 License
+
+MIT
