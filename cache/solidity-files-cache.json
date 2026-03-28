@@ -1,0 +1,40 @@
+{
+  "_format": "hh-sol-cache-2",
+  "files": {
+    "C:\\Users\\smaya\\github-classroom\\innovation-space\\course-project-submission-peer-to-peer\\contracts\\ArtRegistry.sol": {
+      "lastModificationDate": 1772468885802,
+      "contentHash": "0fe3a11e3f4d4965dbc215e00a46ccf0",
+      "sourceName": "contracts/ArtRegistry.sol",
+      "solcConfig": {
+        "version": "0.8.19",
+        "settings": {
+          "optimizer": {
+            "enabled": false,
+            "runs": 200
+          },
+          "outputSelection": {
+            "*": {
+              "*": [
+                "abi",
+                "evm.bytecode",
+                "evm.deployedBytecode",
+                "evm.methodIdentifiers",
+                "metadata"
+              ],
+              "": [
+                "ast"
+              ]
+            }
+          }
+        }
+      },
+      "imports": [],
+      "versionPragmas": [
+        "^0.8.19"
+      ],
+      "artifacts": [
+        "ArtRegistry"
+      ]
+    }
+  }
+}

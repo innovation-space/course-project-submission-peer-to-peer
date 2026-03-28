@@ -1,28 +1,37 @@
-import { useState } from "react";
-import { ethers } from "ethers";
-import { uploadToIPFS, hashFile } from "../utils/contract";
+import { useState, useRef } from "react";
+import { hashFile, uploadToIPFS } from "../utils/contract";
 
 export default function RegisterArt({ contract, account }) {
-  const [file, setFile]       = useState(null);
-  const [title, setTitle]     = useState("");
-  const [artist, setArtist]   = useState("");
-  const [status, setStatus]   = useState("");
+  const [file, setFile] = useState(null);
+  const [title, setTitle] = useState("");
+  const [artist, setArtist] = useState("");
+  const [status, setStatus] = useState("");
   const [loading, setLoading] = useState(false);
-  const [txHash, setTxHash]   = useState("");
+  const [txHash, setTxHash] = useState("");
   const [preview, setPreview] = useState(null);
+  const [dragging, setDragging] = useState(false);
+  const inputRef = useRef();
 
-  // Show image preview when file is selected
-  const handleFileChange = (e) => {
-    const selected = e.target.files[0];
+  const handleFile = (selected) => {
+    if (!selected) return;
     setFile(selected);
-    if (selected) {
-      setPreview(URL.createObjectURL(selected));
-    }
+    setPreview(URL.createObjectURL(selected));
+    setStatus("");
+    setTxHash("");
+  };
+
+  const handleFileChange = (e) => handleFile(e.target.files[0]);
+
+  const handleDrop = (e) => {
+    e.preventDefault();
+    setDragging(false);
+    const dropped = e.dataTransfer.files[0];
+    if (dropped && dropped.type.startsWith("image/")) handleFile(dropped);
   };
 
   const handleRegister = async () => {
-    if (!file)   return alert("Please select an image file!");
-    if (!title)  return alert("Please enter the artwork title!");
+    if (!file) return alert("Please select an image file!");
+    if (!title) return alert("Please enter the artwork title!");
     if (!artist) return alert("Please enter the artist name!");
 
     setLoading(true);
@@ -30,135 +39,137 @@ export default function RegisterArt({ contract, account }) {
     setStatus("🔐 Hashing your image...");
 
     try {
-      // Step 1: Hash the image (runs in browser, no server needed)
       const imageHash = await hashFile(file);
-      setStatus("📦 Uploading image to IPFS...");
+      setStatus("📦 Uploading to IPFS...");
 
-      // Step 2: Upload to IPFS via Pinata
       const ipfsURI = await uploadToIPFS(file, title, artist);
-      setStatus("⛓️ Sending transaction to blockchain...");
+      setStatus("⛓️ Sending transaction to Polygon...");
 
-      // Step 3: Call the smart contract
-      const tx = await contract.registerArtwork(
-        imageHash,
-        title,
-        artist,
-        ipfsURI
-      );
-
-      setStatus("⏳ Waiting for blockchain confirmation...");
+      const tx = await contract.registerArtwork(imageHash, title, artist, ipfsURI);
+      setStatus("⏳ Waiting for confirmation...");
       await tx.wait();
 
       setTxHash(tx.hash);
-      setStatus("✅ Artwork registered successfully on the blockchain!");
-
+      setStatus("✅ Artwork registered on Polygon!");
     } catch (err) {
       if (err.message.includes("AlreadyRegistered")) {
-        setStatus("⚠️ This artwork is already registered in the registry!");
+        setStatus("⚠️ This artwork is already registered!");
       } else if (err.message.includes("user rejected")) {
-        setStatus("❌ Transaction was rejected in MetaMask.");
+        setStatus("❌ Transaction rejected in MetaMask.");
       } else {
         setStatus("❌ Error: " + err.message);
       }
     }
-
     setLoading(false);
   };
 
   const handleReset = () => {
-    setFile(null);
-    setTitle("");
-    setArtist("");
-    setStatus("");
-    setTxHash("");
-    setPreview(null);
+    setFile(null); setTitle(""); setArtist("");
+    setStatus(""); setTxHash(""); setPreview(null);
   };
+
+  const statusType =
+    status.startsWith("✅") ? "success" :
+      (status.startsWith("❌") || status.startsWith("⚠️")) ? "error" : "info";
 
   return (
     <div style={s.card}>
-      <h2 style={s.h2}>📝 Register Your Artwork</h2>
-      <p style={s.sub}>
-        Your image will be hashed, stored on IPFS, and registered
-        on the blockchain with a permanent timestamp.
-      </p>
-
-      {/* Image Preview */}
-      {preview && (
-        <div style={s.previewWrap}>
+      {/* Drop zone */}
+      <div
+        style={{
+          ...s.dropZone,
+          ...(dragging ? s.dropZoneActive : {}),
+          ...(preview ? s.dropZoneHasImage : {}),
+        }}
+        onClick={() => inputRef.current.click()}
+        onDragOver={(e) => { e.preventDefault(); setDragging(true); }}
+        onDragLeave={() => setDragging(false)}
+        onDrop={handleDrop}
+      >
+        {preview ? (
           <img src={preview} alt="preview" style={s.preview} />
+        ) : (
+          <div style={s.dropInner}>
+            <div style={s.dropIcon}>🖼️</div>
+            <div style={s.dropText}>Drop your artwork here</div>
+            <div style={s.dropSub}>or click to browse · PNG, JPG, GIF, SVG</div>
+          </div>
+        )}
+        <input
+          ref={inputRef}
+          type="file"
+          accept="image/*"
+          onChange={handleFileChange}
+          style={{ display: "none" }}
+        />
+      </div>
+
+      {/* Fields */}
+      <div style={s.fields}>
+        <div style={s.field}>
+          <label style={s.label}>Artwork Title</label>
+          <input
+            style={s.input}
+            type="text"
+            placeholder="e.g. Sunset in Pixels"
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
+          />
         </div>
-      )}
+        <div style={s.field}>
+          <label style={s.label}>Artist Name</label>
+          <input
+            style={s.input}
+            type="text"
+            placeholder="e.g. Aditya Singh"
+            value={artist}
+            onChange={(e) => setArtist(e.target.value)}
+          />
+        </div>
+      </div>
 
-      {/* File Input */}
-      <label style={s.label}>Select Image File</label>
-      <input
-        style={s.input}
-        type="file"
-        accept="image/*"
-        onChange={handleFileChange}
-      />
-
-      {/* Title Input */}
-      <label style={s.label}>Artwork Title</label>
-      <input
-        style={s.input}
-        type="text"
-        placeholder="e.g. Sunset in Pixels"
-        value={title}
-        onChange={(e) => setTitle(e.target.value)}
-      />
-
-      {/* Artist Input */}
-      <label style={s.label}>Artist Name</label>
-      <input
-        style={s.input}
-        type="text"
-        placeholder="e.g. Aditya Singh"
-        value={artist}
-        onChange={(e) => setArtist(e.target.value)}
-      />
-
-      {/* Wallet Info */}
+      {/* Wallet row */}
       <div style={s.walletRow}>
-        <span style={s.walletLabel}>Registering from wallet:</span>
+        <span style={s.walletLabel}>Registering from</span>
         <span style={s.walletAddr}>
-          {account ? `${account.slice(0,6)}...${account.slice(-4)}` : "Not connected"}
+          {account ? `${account.slice(0, 6)}…${account.slice(-4)}` : "Not connected"}
         </span>
       </div>
 
-      {/* Register Button */}
+      {/* Button */}
       <button
+        id="btn-register"
         style={loading ? s.btnDisabled : s.btn}
         onClick={handleRegister}
         disabled={loading}
       >
-        {loading ? "⏳ Processing..." : "🚀 Register on Blockchain"}
+        {loading ? (
+          <><span style={s.spinner} />Processing…</>
+        ) : (
+          "🚀 Register on Polygon"
+        )}
       </button>
 
-      {/* Status Message */}
+      {/* Status */}
       {status && (
-        <div style={
-          status.startsWith("✅") ? s.statusSuccess :
-          status.startsWith("❌") || status.startsWith("⚠️") ? s.statusError :
-          s.status
-        }>
+        <div style={statusType === "success" ? s.statusSuccess : statusType === "error" ? s.statusError : s.status}>
           {status}
         </div>
       )}
 
-      {/* Etherscan Link — shown after success */}
+      {/* Polygonscan link */}
       {txHash && (
-  <a
-    href={`https://sepolia.etherscan.io/tx/${txHash}`}
-    target="_blank"
-    rel="noreferrer"
-    style={s.link}
-  >
-    🔗 View Transaction on Etherscan ↗
-  </a>
-)}
+        <a
+          href={`https://amoy.polygonscan.com/tx/${txHash}`}
+          target="_blank"
+          rel="noreferrer"
+          style={s.link}
+        >
+          🔗 View on Polygonscan ↗
+        </a>
+      )}
 
-      {/* Reset Button — shown after success */}
+      {/* Reset */}
       {txHash && (
         <button style={s.resetBtn} onClick={handleReset}>
           + Register Another Artwork
@@ -168,149 +179,123 @@ export default function RegisterArt({ contract, account }) {
   );
 }
 
-// ─── Styles ────────────────────────────────────────────────────────────────────
-
 const s = {
   card: {
-    background   : "#12122a",
-    border       : "1px solid #1e1e48",
-    borderRadius : 16,
-    padding      : "28px 24px",
+    background: "rgba(255,255,255,0.03)",
+    border: "1px solid rgba(255,255,255,0.08)",
+    borderRadius: 24,
+    padding: "28px 28px 24px",
+    backdropFilter: "blur(12px)",
   },
-  h2: {
-    marginBottom : 8,
-    color        : "#c9aaff",
-    fontSize     : "1.3rem",
+  dropZone: {
+    border: "2px dashed rgba(124,58,237,0.35)",
+    borderRadius: 18,
+    cursor: "pointer",
+    marginBottom: 20,
+    overflow: "hidden",
+    minHeight: 160,
+    display: "flex", alignItems: "center", justifyContent: "center",
+    background: "rgba(124,58,237,0.04)",
+    transition: "border-color 0.2s, background 0.2s",
   },
-  sub: {
-    color        : "#555a7a",
-    fontSize     : "0.84rem",
-    marginBottom : 22,
-    lineHeight   : 1.6,
+  dropZoneActive: {
+    borderColor: "#7c3aed",
+    background: "rgba(124,58,237,0.1)",
   },
-  previewWrap: {
-    marginBottom : 18,
-    textAlign    : "center",
+  dropZoneHasImage: {
+    border: "2px solid rgba(124,58,237,0.4)",
+    minHeight: 200,
   },
+  dropInner: { textAlign: "center", padding: "24px 16px" },
+  dropIcon: { fontSize: 40, marginBottom: 10 },
+  dropText: { fontSize: 15, fontWeight: 600, color: "#c4b5fd", marginBottom: 6 },
+  dropSub: { fontSize: 12, color: "#475569" },
   preview: {
-    maxWidth     : "100%",
-    maxHeight    : 200,
-    borderRadius : 12,
-    border       : "1px solid #2e2b5a",
-    objectFit    : "cover",
+    width: "100%", maxHeight: 240,
+    objectFit: "cover", borderRadius: 16,
   },
+  fields: { display: "flex", gap: 14, marginBottom: 14, flexWrap: "wrap" },
+  field: { flex: 1, minWidth: 200 },
   label: {
-    display      : "block",
-    fontSize     : "0.78rem",
-    color        : "#8892a4",
-    marginBottom : 6,
-    fontWeight   : 600,
-    textTransform: "uppercase",
-    letterSpacing: "0.5px",
+    display: "block", fontSize: 11, fontWeight: 700,
+    color: "#64748b", marginBottom: 6,
+    textTransform: "uppercase", letterSpacing: "0.6px",
   },
   input: {
-    display      : "block",
-    width        : "100%",
-    padding      : "12px 16px",
-    margin       : "0 0 18px",
-    background   : "#0b0b18",
-    border       : "1px solid #2e2b5a",
-    borderRadius : 10,
-    color        : "#e2e2f0",
-    fontSize     : 14,
-    outline      : "none",
+    display: "block", width: "100%",
+    padding: "12px 14px",
+    background: "rgba(255,255,255,0.05)",
+    border: "1px solid rgba(255,255,255,0.1)",
+    borderRadius: 12, color: "#f1f5f9",
+    fontSize: 14, outline: "none",
+    transition: "border-color 0.2s",
+    fontFamily: "'Inter', sans-serif",
   },
   walletRow: {
-    display        : "flex",
-    justifyContent : "space-between",
-    alignItems     : "center",
-    padding        : "10px 14px",
-    background     : "#0b0b18",
-    borderRadius   : 10,
-    marginBottom   : 18,
-    border         : "1px solid #1e1e48",
+    display: "flex", justifyContent: "space-between", alignItems: "center",
+    padding: "10px 14px", marginBottom: 16,
+    background: "rgba(16,185,129,0.06)",
+    border: "1px solid rgba(16,185,129,0.15)",
+    borderRadius: 12,
   },
-  walletLabel: {
-    fontSize : "0.8rem",
-    color    : "#555a7a",
-  },
-  walletAddr: {
-    fontSize   : "0.8rem",
-    color      : "#38e8a8",
-    fontFamily : "monospace",
-    fontWeight : 700,
-  },
+  walletLabel: { fontSize: 12, color: "#475569", fontWeight: 500 },
+  walletAddr: { fontSize: 13, fontFamily: "monospace", color: "#10b981", fontWeight: 700 },
   btn: {
-    width        : "100%",
-    padding      : "14px",
-    background   : "linear-gradient(90deg, #b48bff, #5eaeff)",
-    border       : "none",
-    borderRadius : 12,
-    color        : "#fff",
-    fontWeight   : 700,
-    cursor       : "pointer",
-    fontSize     : 15,
+    width: "100%", padding: "15px",
+    background: "linear-gradient(135deg,#7c3aed,#2563eb)",
+    border: "none", borderRadius: 14,
+    color: "#fff", fontWeight: 700, fontSize: 15,
+    cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
+    boxShadow: "0 4px 20px rgba(124,58,237,0.4)",
+    fontFamily: "'Inter', sans-serif",
   },
   btnDisabled: {
-    width        : "100%",
-    padding      : "14px",
-    background   : "#2e2b5a",
-    border       : "none",
-    borderRadius : 12,
-    color        : "#555a7a",
-    fontWeight   : 700,
-    cursor       : "not-allowed",
-    fontSize     : 15,
+    width: "100%", padding: "15px",
+    background: "rgba(255,255,255,0.06)",
+    border: "1px solid rgba(255,255,255,0.08)",
+    borderRadius: 14, color: "#475569",
+    fontWeight: 700, fontSize: 15, cursor: "not-allowed",
+    display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
+    fontFamily: "'Inter', sans-serif",
+  },
+  spinner: {
+    display: "inline-block", width: 15, height: 15,
+    border: "2px solid rgba(255,255,255,0.2)",
+    borderTopColor: "#fff", borderRadius: "50%",
+    animation: "spin 0.7s linear infinite",
   },
   status: {
-    marginTop    : 16,
-    padding      : "12px 16px",
-    background   : "#0e0e22",
-    border       : "1px solid #2e2b5a",
-    borderRadius : 10,
-    fontSize     : 14,
-    color        : "#e2e2f0",
-    lineHeight   : 1.5,
+    marginTop: 14, padding: "12px 16px",
+    background: "rgba(255,255,255,0.04)",
+    border: "1px solid rgba(255,255,255,0.08)",
+    borderRadius: 12, fontSize: 14, color: "#94a3b8", lineHeight: 1.5,
   },
   statusSuccess: {
-    marginTop    : 16,
-    padding      : "12px 16px",
-    background   : "rgba(56,232,168,0.08)",
-    border       : "1px solid rgba(56,232,168,0.3)",
-    borderRadius : 10,
-    fontSize     : 14,
-    color        : "#38e8a8",
-    lineHeight   : 1.5,
+    marginTop: 14, padding: "12px 16px",
+    background: "rgba(16,185,129,0.08)",
+    border: "1px solid rgba(16,185,129,0.25)",
+    borderRadius: 12, fontSize: 14, color: "#34d399", lineHeight: 1.5,
+    fontWeight: 600,
   },
   statusError: {
-    marginTop    : 16,
-    padding      : "12px 16px",
-    background   : "rgba(239,68,68,0.08)",
-    border       : "1px solid rgba(239,68,68,0.3)",
-    borderRadius : 10,
-    fontSize     : 14,
-    color        : "#f87171",
-    lineHeight   : 1.5,
+    marginTop: 14, padding: "12px 16px",
+    background: "rgba(239,68,68,0.08)",
+    border: "1px solid rgba(239,68,68,0.25)",
+    borderRadius: 12, fontSize: 14, color: "#f87171", lineHeight: 1.5,
   },
   link: {
-    display      : "block",
-    marginTop    : 12,
-    color        : "#5eaeff",
-    fontSize     : 14,
-    textDecoration: "none",
-    fontWeight   : 600,
+    display: "block", marginTop: 12,
+    color: "#818cf8", fontSize: 14,
+    textDecoration: "none", fontWeight: 600,
+    textAlign: "center",
   },
   resetBtn: {
-    display      : "block",
-    width        : "100%",
-    marginTop    : 12,
-    padding      : "12px",
-    background   : "transparent",
-    border       : "1px solid #2e2b5a",
-    borderRadius : 12,
-    color        : "#8892a4",
-    cursor       : "pointer",
-    fontSize     : 14,
-    fontWeight   : 600,
+    display: "block", width: "100%", marginTop: 10,
+    padding: "12px",
+    background: "transparent",
+    border: "1px solid rgba(255,255,255,0.1)",
+    borderRadius: 14, color: "#64748b",
+    cursor: "pointer", fontSize: 14, fontWeight: 600,
+    fontFamily: "'Inter', sans-serif",
   },
 };
