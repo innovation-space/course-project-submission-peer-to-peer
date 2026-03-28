@@ -1,6 +1,6 @@
-# 🎨 Blockchain Art Registry
+# 🎨 Blockchain Art Registry (Polygon)
 
-A decentralized application (DApp) for registering and verifying digital artwork ownership using blockchain and IPFS.
+A decentralized application (DApp) for registering and verifying digital artwork ownership using the Polygon blockchain and IPFS.
 
 ---
 
@@ -10,6 +10,7 @@ A decentralized application (DApp) for registering and verifying digital artwork
 * Store file hashes via IPFS
 * Verify ownership securely
 * MetaMask wallet integration
+* Low-cost transactions using Polygon
 
 ---
 
@@ -20,6 +21,7 @@ A decentralized application (DApp) for registering and verifying digital artwork
 * React + Vite (Frontend)
 * Ethers.js (Blockchain Interaction)
 * IPFS (Storage)
+* Polygon Mumbai Testnet (Blockchain Network)
 
 ---
 
@@ -33,11 +35,11 @@ cd frontend && npm install && cd ..
 # Compile contracts
 npx hardhat compile
 
-# Start local blockchain
+# Run local blockchain (optional)
 npx hardhat node
 
-# Deploy contract (new terminal)
-npx hardhat run scripts/deploy.js --network localhost
+# Deploy contract on Polygon
+npx hardhat run scripts/deploy.js --network polygon
 
 # Run frontend
 cd frontend && npm run dev
@@ -51,8 +53,18 @@ Create a `.env` file in root:
 
 ```
 PRIVATE_KEY=your_private_key
-RPC_URL=your_rpc_url
+RPC_URL=your_polygon_rpc_url
 ```
+
+---
+
+## 🌐 Network Configuration
+
+The project is deployed on **Polygon Mumbai Testnet**, providing:
+
+* Faster transactions
+* Lower gas fees
+* Full EVM compatibility
 
 ---
 
