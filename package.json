@@ -1,7 +1,7 @@
 {
   "name": "blockchain-art-registry",
   "version": "1.0.0",
-  "description": "A blockchain-based art registry system to verify ownership using Ethereum and IPFS",
+  "description": "A blockchain-based art registry system to verify ownership using Polygon and IPFS",
   "main": "index.js",
   "scripts": {
     "test": "npx hardhat test",
@@ -10,7 +10,7 @@
   },
   "keywords": [
     "blockchain",
-    "ethereum",
+    "polygon",
     "hardhat",
     "art",
     "ipfs",

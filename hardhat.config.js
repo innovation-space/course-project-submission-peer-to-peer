@@ -8,13 +8,26 @@ module.exports = {
     localhost: {
       url: "http://127.0.0.1:8545"
     },
-    // Ethereum testnet (free ETH from faucet)
-    sepolia: {
-      url: process.env.SEPOLIA_RPC_URL,       // from Alchemy or Infura
-      accounts: [process.env.PRIVATE_KEY]     // your MetaMask private key
+    // Polygon Amoy testnet (free MATIC from faucet: https://faucet.polygon.technology)
+    amoy: {
+      url: process.env.RPC_URL || "https://rpc-amoy.polygon.technology",
+      accounts: process.env.PRIVATE_KEY ? [process.env.PRIVATE_KEY] : [],
+      chainId: 80002
     }
   },
   etherscan: {
-    apiKey: process.env.ETHERSCAN_API_KEY     // to verify contract on Etherscan
+    apiKey: {
+      polygonAmoy: process.env.POLYGONSCAN_API_KEY  // to verify contract on Polygonscan
+    },
+    customChains: [
+      {
+        network: "polygonAmoy",
+        chainId: 80002,
+        urls: {
+          apiURL: "https://api-amoy.polygonscan.com/api",
+          browserURL: "https://amoy.polygonscan.com"
+        }
+      }
+    ]
   }
 };
