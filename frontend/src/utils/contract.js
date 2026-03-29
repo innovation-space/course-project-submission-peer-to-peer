@@ -15,7 +15,7 @@ export async function hashFile(file) {
  * Get free API keys at: https://pinata.cloud
  */
 export async function uploadToIPFS(file, title, artist) {
-  const PINATA_JWT = process.env.REACT_APP_PINATA_JWT; // set in .env file
+  const PINATA_JWT = import.meta.env.VITE_PINATA_JWT; // set in .env file
 
   // Upload image
   const formData = new FormData();
