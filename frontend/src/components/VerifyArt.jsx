@@ -1,13 +1,25 @@
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { hashFile } from "../utils/contract";
 
-export default function VerifyArt({ contract }) {
+export default function VerifyArt({ contract, isGasless }) {
   const [file, setFile] = useState(null);
   const [result, setResult] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [dragging, setDragging] = useState(false);
   const [preview, setPreview] = useState(null);
+  const [tilt, setTilt] = useState({ x: 0, y: 0 });
+  const cardRef = useRef();
+
+  const handleMouseMove = (e) => {
+    if (!cardRef.current) return;
+    const { left, top, width, height } = cardRef.current.getBoundingClientRect();
+    const x = (e.clientX - left) / width - 0.5;
+    const y = (e.clientY - top) / height - 0.5;
+    setTilt({ x: x * 8, y: -y * 8 });
+  };
+
+  const resetTilt = () => setTilt({ x: 0, y: 0 });
 
   const handleFile = (f) => {
     if (!f) return;
@@ -31,17 +43,37 @@ export default function VerifyArt({ contract }) {
     setResult(null);
     try {
       const imageHash = await hashFile(file);
-      const [title, artist, ipfsURI, owner, timestamp] =
-        await contract.verifyArtwork(imageHash);
+      let details;
 
-      setResult({
-        title, artist, ipfsURI, owner,
-        date: new Date(Number(timestamp) * 1000).toLocaleString(),
-        hash: imageHash,
-      });
+      // 1. Try Local Database (Gasless Mode)
+      const localArt = JSON.parse(localStorage.getItem("GASLESS_ART") || "[]");
+      const foundLocal = localArt.find(a => a.hash === imageHash);
+
+      if (foundLocal) {
+        details = {
+          ...foundLocal,
+          isGasless: true,
+          date: new Date(foundLocal.timestamp * 1000).toLocaleString()
+        };
+      } else if (contract) {
+        // 2. Fallback to Blockchain if not found locally or if wallet connected
+        const [title, artist, ipfsURI, owner, timestamp] = await contract.verifyArtwork(imageHash);
+        details = {
+          title, artist, ipfsURI, owner,
+          date: new Date(Number(timestamp) * 1000).toLocaleString(),
+          hash: imageHash,
+          isGasless: false
+        };
+      } else {
+        throw new Error("Artwork not found locally and wallet is not connected.");
+      }
+
+      setResult(details);
     } catch (err) {
-      if (err.message.includes("NotFound")) {
+      if (err.message.includes("NotFound") || err.message.includes("not found")) {
         setError("This artwork is NOT registered in the registry.");
+      } else if (err.message.includes("could not decode")) {
+        setError("Registry Connection Error: Ensure you are on the Polygon Amoy Testnet.");
       } else {
         setError("Error: " + err.message);
       }
@@ -50,7 +82,15 @@ export default function VerifyArt({ contract }) {
   };
 
   return (
-    <div style={s.card}>
+    <div
+      ref={cardRef}
+      onMouseMove={handleMouseMove}
+      onMouseLeave={resetTilt}
+      style={{
+        ...s.card,
+        transform: `perspective(1000px) rotateX(${tilt.y}deg) rotateY(${tilt.x}deg)`,
+      }}
+    >
       {/* Drop zone */}
       <div
         style={{
@@ -88,9 +128,9 @@ export default function VerifyArt({ contract }) {
         disabled={loading}
       >
         {loading ? (
-          <><span style={s.spinner} />Verifying…</>
+          <><span style={s.spinner} />Authenticating…</>
         ) : (
-          "🔍 Verify Ownership"
+          "Verify Ownership"
         )}
       </button>
 
@@ -99,54 +139,56 @@ export default function VerifyArt({ contract }) {
         <div style={s.errorBox}>
           <div style={s.errorIcon}>✗</div>
           <div>
-            <div style={s.errorTitle}>Not Registered</div>
+            <div style={s.errorTitle}>Verification Failed</div>
             <div style={s.errorSub}>{error}</div>
           </div>
         </div>
       )}
 
-      {/* Result */}
+      {/* Result (Certificate Design) */}
       {result && (
         <div style={s.resultBox}>
-          <div style={s.resultHeader}>
-            <div style={s.checkCircle}>✓</div>
-            <div>
-              <div style={s.resultTitle}>Ownership Verified</div>
-              <div style={s.resultSub}>This artwork is on-chain</div>
+          <div style={s.certHeader}>
+            <div style={{ ...s.certSeal, ...(result.isGasless ? s.gaslessSeal : {}) }}>
+              <div style={s.certSealInner}>{result.isGasless ? "⚡" : "✓"}</div>
+            </div>
+            <div style={s.certHeaderRight}>
+              <div style={s.certTitle}>{result.isGasless ? "Eco Authenticity Proof" : "Authenticity Certificate"}</div>
+              <div style={s.certID}>ID: {result.hash.slice(2, 14)}</div>
             </div>
           </div>
 
           <div style={s.divider} />
 
-          {[
-            { label: "Title", value: result.title },
-            { label: "Artist", value: result.artist },
-            { label: "Owner", value: `${result.owner.slice(0, 8)}…${result.owner.slice(-6)}`, mono: true },
-            { label: "Registered", value: result.date },
-            { label: "Hash", value: `${result.hash.slice(0, 16)}…`, mono: true, small: true },
-          ].map(({ label, value, mono, small }) => (
-            <div key={label} style={s.row}>
-              <span style={s.rowLabel}>{label}</span>
-              <span style={{
-                ...s.rowValue,
-                ...(mono ? s.rowMono : {}),
-                ...(small ? { fontSize: 11 } : {}),
-              }}>
-                {value}
-              </span>
-            </div>
-          ))}
+          <div style={s.certBody}>
+            {[
+              { label: "Artwork Title", value: result.title },
+              { label: "Creator Name", value: result.artist },
+              { label: "Current Owner", value: `${result.owner.slice(0, 10)}…${result.owner.slice(-8)}`, mono: true },
+              { label: "Registry Date", value: result.date },
+            ].map(({ label, value, mono }) => (
+              <div key={label} style={s.certRow}>
+                <span style={s.certLabel}>{label}</span>
+                <span style={{ ...s.certValue, ...(mono ? s.certMono : {}) }}>{value}</span>
+              </div>
+            ))}
+          </div>
 
-          {result.ipfsURI && (
-            <a
-              href={result.ipfsURI.replace("ipfs://", "https://ipfs.io/ipfs/")}
-              target="_blank"
-              rel="noreferrer"
-              style={s.ipfsLink}
-            >
-              🖼️ View on IPFS ↗
-            </a>
-          )}
+          <div style={s.certFooter}>
+            <div style={result.isGasless ? s.gaslessBadge : s.certBadge}>
+              {result.isGasless ? "ECO VERIFIED" : "POLYGON SECURED"}
+            </div>
+            {result.ipfsURI && (
+              <a
+                href={result.ipfsURI.replace("ipfs://", "https://ipfs.io/ipfs/")}
+                target="_blank"
+                rel="noreferrer"
+                style={s.ipfsLink}
+              >
+                View metadata on IPFS ↗
+              </a>
+            )}
+          </div>
         </div>
       )}
     </div>
@@ -157,98 +199,115 @@ const s = {
   card: {
     background: "rgba(255,255,255,0.03)",
     border: "1px solid rgba(255,255,255,0.08)",
-    borderRadius: 24, padding: "28px 28px 24px",
-    backdropFilter: "blur(12px)",
+    borderRadius: 32, padding: "40px",
+    backdropFilter: "blur(20px)",
+    transition: "transform 0.1s ease-out",
+    boxShadow: "0 20px 50px rgba(0,0,0,0.3)",
   },
   dropZone: {
-    border: "2px dashed rgba(16,185,129,0.3)",
-    borderRadius: 18, cursor: "pointer",
-    marginBottom: 16, overflow: "hidden",
-    minHeight: 160,
+    border: "1px solid rgba(16,185,129,0.2)",
+    borderRadius: 24, cursor: "pointer",
+    marginBottom: 32, overflow: "hidden",
+    minHeight: 200,
     display: "flex", alignItems: "center", justifyContent: "center",
-    background: "rgba(16,185,129,0.03)",
-    transition: "border-color 0.2s, background 0.2s",
+    background: "rgba(16,185,129,0.02)",
+    transition: "all 0.3s cubic-bezier(0.4, 0, 0.2, 1)",
   },
-  dropZoneActive: { borderColor: "#10b981", background: "rgba(16,185,129,0.07)" },
-  dropZoneHasImage: { border: "2px solid rgba(16,185,129,0.35)", minHeight: 200 },
-  dropInner: { textAlign: "center", padding: "24px 16px" },
-  dropIcon: { fontSize: 40, marginBottom: 10 },
-  dropText: { fontSize: 15, fontWeight: 600, color: "#6ee7b7", marginBottom: 6 },
-  dropSub: { fontSize: 12, color: "#475569" },
-  preview: { width: "100%", maxHeight: 240, objectFit: "cover", borderRadius: 16 },
+  dropZoneActive: { borderColor: "#10b981", background: "rgba(16,185,129,0.08)", transform: "scale(1.02)" },
+  dropZoneHasImage: { border: "1px solid rgba(255,255,255,0.1)", background: "rgba(0,0,0,0.2)" },
+  dropInner: { textAlign: "center", padding: "40px 20px" },
+  dropIcon: { fontSize: 48, marginBottom: 16 },
+  dropText: { fontSize: 17, fontWeight: 700, color: "#6ee7b7", marginBottom: 8 },
+  dropSub: { fontSize: 13, color: "#475569", fontWeight: 500 },
+  preview: { width: "100%", maxHeight: 300, objectFit: "cover", borderRadius: 16 },
 
   btn: {
-    width: "100%", padding: "15px",
-    background: "linear-gradient(135deg,#059669,#0ea5e9)",
-    border: "none", borderRadius: 14,
-    color: "#fff", fontWeight: 700, fontSize: 15,
-    cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
-    boxShadow: "0 4px 20px rgba(5,150,105,0.35)",
+    width: "100%", padding: "18px",
+    background: "#fff",
+    border: "none", borderRadius: 20,
+    color: "#02020a", fontWeight: 800, fontSize: 16,
+    cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 10,
+    boxShadow: "0 10px 30px rgba(255,255,255,0.1)",
     fontFamily: "'Inter', sans-serif",
-    marginBottom: 16,
+    transition: "transform 0.2s",
+    marginBottom: 24,
   },
   btnDisabled: {
-    width: "100%", padding: "15px",
+    width: "100%", padding: "18px",
     background: "rgba(255,255,255,0.06)",
-    border: "1px solid rgba(255,255,255,0.08)",
-    borderRadius: 14, color: "#475569",
-    fontWeight: 700, fontSize: 15, cursor: "not-allowed",
-    display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
+    border: "1px solid rgba(255,255,255,0.05)",
+    borderRadius: 20, color: "#334155",
+    fontWeight: 800, fontSize: 16, cursor: "not-allowed",
+    display: "flex", alignItems: "center", justifyContent: "center", gap: 10,
     fontFamily: "'Inter', sans-serif",
-    marginBottom: 16,
+    marginBottom: 24,
   },
   spinner: {
-    display: "inline-block", width: 15, height: 15,
-    border: "2px solid rgba(255,255,255,0.2)",
-    borderTopColor: "#fff", borderRadius: "50%",
+    display: "inline-block", width: 18, height: 18,
+    border: "3px solid rgba(16,185,129,0.2)",
+    borderTopColor: "#10b981", borderRadius: "50%",
     animation: "spin 0.7s linear infinite",
   },
 
   errorBox: {
     display: "flex", gap: 14, alignItems: "flex-start",
-    padding: "16px", borderRadius: 14,
-    background: "rgba(239,68,68,0.07)",
-    border: "1px solid rgba(239,68,68,0.2)",
+    padding: "20px", borderRadius: 20,
+    background: "rgba(239,68,68,0.04)",
+    border: "1px solid rgba(239,68,68,0.15)",
   },
   errorIcon: {
-    width: 32, height: 32, borderRadius: "50%",
-    background: "rgba(239,68,68,0.15)",
-    border: "1px solid rgba(239,68,68,0.3)",
+    width: 36, height: 36, borderRadius: "50%",
+    background: "rgba(239,68,68,0.1)",
     display: "flex", alignItems: "center", justifyContent: "center",
-    color: "#f87171", fontWeight: 700, fontSize: 16, flexShrink: 0,
+    color: "#f87171", fontWeight: 800, fontSize: 18, flexShrink: 0,
   },
-  errorTitle: { fontSize: 14, fontWeight: 700, color: "#f87171", marginBottom: 4 },
-  errorSub: { fontSize: 13, color: "#94a3b8" },
+  errorTitle: { fontSize: 15, fontWeight: 800, color: "#f87171", marginBottom: 4 },
+  errorSub: { fontSize: 14, color: "#94a3b8", lineHeight: 1.5 },
 
   resultBox: {
-    padding: "20px",
-    background: "rgba(16,185,129,0.06)",
-    border: "1px solid rgba(16,185,129,0.2)",
-    borderRadius: 18,
-    animation: "fadeUp 0.4s ease both",
+    padding: "40px",
+    background: "linear-gradient(135deg, rgba(255,255,255,0.03), rgba(255,255,255,0.01))",
+    border: "1px solid rgba(255,255,255,0.1)",
+    borderRadius: 24,
+    animation: "fadeUp 0.6s cubic-bezier(0.16, 1, 0.3, 1) both",
+    position: "relative", overflow: "hidden",
   },
-  resultHeader: { display: "flex", gap: 14, alignItems: "center", marginBottom: 16 },
-  checkCircle: {
-    width: 40, height: 40, borderRadius: "50%",
+  certHeader: { display: "flex", gap: 20, alignItems: "center", marginBottom: 32 },
+  certSeal: {
+    width: 60, height: 60, borderRadius: "50%",
     background: "linear-gradient(135deg,#059669,#0ea5e9)",
     display: "flex", alignItems: "center", justifyContent: "center",
-    color: "#fff", fontWeight: 900, fontSize: 20, flexShrink: 0,
+    flexShrink: 0, padding: 4,
   },
-  resultTitle: { fontSize: 15, fontWeight: 700, color: "#34d399" },
-  resultSub: { fontSize: 12, color: "#475569" },
-  divider: { height: 1, background: "rgba(255,255,255,0.06)", margin: "0 0 16px" },
+  certSealInner: {
+    width: "100%", height: "100%", borderRadius: "50%",
+    border: "2px dashed rgba(255,255,255,0.4)",
+    display: "flex", alignItems: "center", justifyContent: "center",
+    color: "#fff", fontWeight: 900, fontSize: 28,
+  },
+  certHeaderRight: { flex: 1 },
+  certTitle: { fontSize: 18, fontWeight: 800, color: "#fff", marginBottom: 4, textTransform: "uppercase", letterSpacing: "1px" },
+  certID: { fontSize: 12, color: "#475569", fontFamily: "monospace", letterSpacing: "1px" },
 
-  row: {
-    display: "flex", justifyContent: "space-between", alignItems: "flex-start",
-    gap: 12, marginBottom: 10,
-  },
-  rowLabel: { fontSize: 12, color: "#475569", fontWeight: 600, minWidth: 80, paddingTop: 1 },
-  rowValue: { fontSize: 13, color: "#e2e8f0", textAlign: "right", wordBreak: "break-all", flex: 1 },
-  rowMono: { fontFamily: "monospace", color: "#a78bfa" },
+  divider: { height: 1, background: "rgba(255,255,255,0.08)", margin: "0 0 32px" },
 
-  ipfsLink: {
-    display: "block", marginTop: 14,
-    color: "#60a5fa", fontSize: 13, fontWeight: 600,
-    textDecoration: "none", textAlign: "center",
+  certBody: { display: "flex", flexDirection: "column", gap: 16, marginBottom: 40 },
+  certRow: { display: "flex", flexDirection: "column", gap: 6 },
+  certLabel: { fontSize: 11, color: "#475569", fontWeight: 700, textTransform: "uppercase", letterSpacing: "1px" },
+  certValue: { fontSize: 16, color: "#fff", fontWeight: 600 },
+  certMono: { fontFamily: "monospace", color: "#60a5fa", fontSize: 14 },
+
+  certFooter: { display: "flex", justifyContent: "space-between", alignItems: "center" },
+  certBadge: {
+    fontSize: 10, fontWeight: 900, color: "#10b981",
+    padding: "6px 12px", background: "rgba(16,185,129,0.1)",
+    borderRadius: 8, letterSpacing: "2px",
   },
+  gaslessBadge: {
+    fontSize: 10, fontWeight: 900, color: "#22c55e",
+    padding: "6px 12px", background: "rgba(34,197,94,0.1)",
+    borderRadius: 8, letterSpacing: "2px",
+  },
+  gaslessSeal: { background: "linear-gradient(135deg,#22c55e,#10b981)" },
+  ipfsLink: { color: "#475569", fontSize: 12, fontWeight: 700, textDecoration: "none" },
 };
