@@ -13,8 +13,24 @@ export default function ArtGallery({ contract }) {
       setLoading(true);
       let items = [];
 
-      // 1. Fetch real events from blockchain if contract exists
-      if (contract) {
+      // 1. Try fetching from Backend API first (Instant)
+      try {
+        const response = await fetch("http://localhost:5000/api/artworks");
+        const apiData = await response.json();
+        if (apiData && apiData.length > 0) {
+          items = apiData.map(art => ({
+            ...art,
+            hash: art.imageHash,
+            ipfsURI: art.ipfsURI.replace("ipfs://", "https://ipfs.io/ipfs/"),
+            date: new Date(art.timestamp * 1000).toLocaleDateString()
+          }));
+        }
+      } catch (e) {
+        console.warn("Backend fetch failed, falling back to blockchain:", e);
+      }
+
+      // 2. Fetch real events from blockchain if items is still empty or to verify
+      if (contract && items.length === 0) {
         const filter = contract.filters.ArtworkRegistered();
         const events = await contract.queryFilter(filter, -5000);
 
@@ -39,13 +55,13 @@ export default function ArtGallery({ contract }) {
         );
       }
 
-      // 2. Fetch local Gasless art
+      // 3. Fetch local Gasless art (for legacy/offline support)
       const localItems = JSON.parse(localStorage.getItem("GASLESS_ART") || "[]").map(item => ({
         ...item,
         date: new Date(item.timestamp * 1000).toLocaleDateString()
       }));
 
-      // 3. Merge and deduplicate
+      // 4. Merge and deduplicate
       const combined = [...localItems, ...items.filter(i => i !== null)];
       const unique = combined.filter((v, i, a) => a.findIndex(t => t.hash === v.hash) === i);
 

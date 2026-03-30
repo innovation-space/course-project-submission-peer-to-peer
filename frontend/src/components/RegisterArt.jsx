@@ -74,6 +74,22 @@ export default function RegisterArt({ contract, account, isGasless }) {
 
         setTxHash("gasless_demo_" + Math.random().toString(36).slice(2));
         setStatus("✅ Artwork registered (Gasless Mode)!");
+
+        // Sync with Backend (Gasless)
+        try {
+          await fetch("http://localhost:5000/api/artworks", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ 
+              imageHash, title, artist, ipfsURI, 
+              owner: account || "0xDemoUser...", 
+              timestamp: Math.floor(Date.now() / 1000),
+              isGasless: true 
+            })
+          });
+        } catch (e) {
+          console.warn("Backend sync failed (Gasless):", e);
+        }
       } else {
         if (!contract) throw new Error("Wallet not connected!");
         setStatus("⛓️ Sending transaction to Polygon...");
@@ -82,6 +98,21 @@ export default function RegisterArt({ contract, account, isGasless }) {
         await tx.wait();
         setTxHash(tx.hash);
         setStatus("✅ Artwork registered on Polygon!");
+
+        // Sync with Backend
+        try {
+          await fetch("http://localhost:5000/api/artworks", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ 
+              imageHash, title, artist, ipfsURI, 
+              owner: account, timestamp: Math.floor(Date.now() / 1000),
+              isGasless: false 
+            })
+          });
+        } catch (e) {
+          console.warn("Backend sync failed, but blockchain is OK:", e);
+        }
       }
     } catch (err) {
       if (err.message.includes("AlreadyRegistered")) {
@@ -114,6 +145,7 @@ export default function RegisterArt({ contract, account, isGasless }) {
         transform: `perspective(1000px) rotateX(${tilt.y}deg) rotateY(${tilt.x}deg)`,
       }}
     >
+      <div style={s.cardInner} />
       {/* Drop zone */}
       <div
         style={{
@@ -202,7 +234,7 @@ export default function RegisterArt({ contract, account, isGasless }) {
       )}
 
       {/* Polygonscan link */}
-      {txHash && (
+      {txHash && !isGasless && (
         <a
           href={`https://amoy.polygonscan.com/tx/${txHash}`}
           target="_blank"
@@ -211,6 +243,12 @@ export default function RegisterArt({ contract, account, isGasless }) {
         >
           View on Polygonscan ↗
         </a>
+      )}
+
+      {txHash && isGasless && (
+        <div style={{ ...s.link, color: "#10b981", pointerEvents: "none" }}>
+          ✓ Synced to Local Registry
+        </div>
       )}
 
       {/* Reset */}
@@ -231,7 +269,14 @@ const s = {
     padding: "40px",
     backdropFilter: "blur(20px)",
     transition: "transform 0.1s ease-out",
-    boxShadow: "0 20px 50px rgba(0,0,0,0.3)",
+    boxShadow: "0 40px 100px rgba(0,0,0,0.5), inset 0 0 40px rgba(255,255,255,0.02)",
+    position: "relative",
+    overflow: "hidden",
+  },
+  cardInner: {
+    position: "absolute", top: 0, left: 0, right: 0, height: 1.5,
+    background: "linear-gradient(90deg, transparent, rgba(124,58,237,0.4), transparent)",
+    pointerEvents: "none", zIndex: 1,
   },
   dropZone: {
     border: "1px solid rgba(124,58,237,0.2)",
@@ -241,9 +286,10 @@ const s = {
     overflow: "hidden",
     minHeight: 200,
     display: "flex", alignItems: "center", justifyContent: "center",
-    background: "rgba(124,58,237,0.02)",
+    background: "rgba(124,58,237,0.01)",
     transition: "all 0.3s cubic-bezier(0.4, 0, 0.2, 1)",
     position: "relative",
+    boxShadow: "inset 0 0 30px rgba(0,0,0,0.4)",
   },
   dropZoneActive: {
     borderColor: "#7c3aed",
@@ -265,8 +311,12 @@ const s = {
     animation: "pulse 2s infinite",
   },
   dropIcon: { fontSize: 48, position: "relative", zIndex: 1 },
-  dropText: { fontSize: 17, fontWeight: 700, color: "#f1f5f9", marginBottom: 8 },
-  dropSub: { fontSize: 13, color: "#475569", fontWeight: 500 },
+  dropText: { 
+    fontSize: 17, fontWeight: 700, color: "#a78bfa", 
+    marginBottom: 8, fontFamily: "'Space Mono', monospace", 
+    letterSpacing: "1px" 
+  },
+  dropSub: { fontSize: 13, color: "#475569", fontWeight: 500, fontFamily: "monospace", opacity: 0.6 },
   preview: {
     width: "100%", maxHeight: 300,
     objectFit: "cover", borderRadius: 16,

@@ -91,6 +91,7 @@ export default function VerifyArt({ contract, isGasless }) {
         transform: `perspective(1000px) rotateX(${tilt.y}deg) rotateY(${tilt.x}deg)`,
       }}
     >
+      <div style={s.cardInner} />
       {/* Drop zone */}
       <div
         style={{
@@ -202,7 +203,14 @@ const s = {
     borderRadius: 32, padding: "40px",
     backdropFilter: "blur(20px)",
     transition: "transform 0.1s ease-out",
-    boxShadow: "0 20px 50px rgba(0,0,0,0.3)",
+    boxShadow: "0 40px 100px rgba(0,0,0,0.5), inset 0 0 40px rgba(255,255,255,0.02)",
+    position: "relative",
+    overflow: "hidden",
+  },
+  cardInner: {
+    position: "absolute", top: 0, left: 0, right: 0, height: 1.5,
+    background: "linear-gradient(90deg, transparent, rgba(16,185,129,0.4), transparent)",
+    pointerEvents: "none", zIndex: 1,
   },
   dropZone: {
     border: "1px solid rgba(16,185,129,0.2)",
@@ -210,15 +218,20 @@ const s = {
     marginBottom: 32, overflow: "hidden",
     minHeight: 200,
     display: "flex", alignItems: "center", justifyContent: "center",
-    background: "rgba(16,185,129,0.02)",
+    background: "rgba(16,185,129,0.01)",
     transition: "all 0.3s cubic-bezier(0.4, 0, 0.2, 1)",
+    boxShadow: "inset 0 0 30px rgba(0,0,0,0.4)",
   },
   dropZoneActive: { borderColor: "#10b981", background: "rgba(16,185,129,0.08)", transform: "scale(1.02)" },
   dropZoneHasImage: { border: "1px solid rgba(255,255,255,0.1)", background: "rgba(0,0,0,0.2)" },
   dropInner: { textAlign: "center", padding: "40px 20px" },
   dropIcon: { fontSize: 48, marginBottom: 16 },
-  dropText: { fontSize: 17, fontWeight: 700, color: "#6ee7b7", marginBottom: 8 },
-  dropSub: { fontSize: 13, color: "#475569", fontWeight: 500 },
+  dropText: { 
+    fontSize: 17, fontWeight: 700, color: "#6ee7b7", 
+    marginBottom: 8, fontFamily: "'Space Mono', monospace",
+    letterSpacing: "1px"
+  },
+  dropSub: { fontSize: 13, color: "#475569", fontWeight: 500, fontFamily: "monospace", opacity: 0.6 },
   preview: { width: "100%", maxHeight: 300, objectFit: "cover", borderRadius: 16 },
 
   btn: {
