@@ -3,6 +3,7 @@ import { ethers } from "ethers";
 import RegisterArt from "./components/RegisterArt";
 import VerifyArt from "./components/VerifyArt";
 import ArtGallery from "./components/ArtGallery";
+import BlockchainBackground from "./components/BlockchainBackground";
 import ART_REGISTRY_ABI from "./abi/ArtRegistry.json";
 import { getGithubAuthUrl, fetchGithubProfile, hasRealClientId, saveClientId } from "./utils/githubAuth";
 
@@ -72,17 +73,10 @@ async function switchToPolygonAmoy() {
   }
 }
 
-// Animated floating orb component
-function FloatingOrbs() {
-  return (
-    <div style={orb.container}>
-      <div style={{ ...orb.orb, ...orb.orb1 }} />
-      <div style={{ ...orb.orb, ...orb.orb2 }} />
-      <div style={{ ...orb.orb, ...orb.orb3 }} />
-      <div style={{ ...orb.orb, ...orb.orb4 }} />
-    </div>
-  );
-}
+/** 
+ * Floating Orbs have been replaced with the Blockchain Node Network 
+ * for a more technical, 3D system feel.
+ */
 
 export default function App() {
   const [account, setAccount] = useState(null);
@@ -143,7 +137,7 @@ export default function App() {
   return (
     <div style={s.page}>
       <style>{cssAnimations}</style>
-      <FloatingOrbs />
+      <BlockchainBackground />
 
       {/* ── NAV ── */}
       <nav style={{ ...s.nav, ...(scrolled ? s.navScrolled : {}) }}>
@@ -159,7 +153,7 @@ export default function App() {
             <div style={s.gaslessToggle} onClick={() => setIsGasless(!isGasless)}>
                <div style={{ ...s.gaslessDot, ...(isGasless ? s.gaslessDotOn : {}) }} />
                <span style={{ ...s.gaslessLabel, ...(isGasless ? s.gaslessLabelOn : {}) }}>
-                 {isGasless ? "Gasless Mode On" : "Eco Mode Off"}
+                 {isGasless ? "SYS/GASLESS" : "SYS/STANDARD"}
                </span>
             </div>
 
@@ -345,8 +339,8 @@ export default function App() {
 
       {/* ── FOOTER ── */}
       <footer style={s.footer}>
-        <span style={s.footerLogo}>⬡ ArtChain</span>
-        <span style={s.footerText}>Built on Polygon · Stored on IPFS · Open Source</span>
+        <span style={s.footerLogo}>⬡ ART_CHAIN_v2.0</span>
+        <span style={s.footerText}>PROTOCOL: POLYGON // STORAGE: IPFS // STATUS: OPERATIONAL</span>
       </footer>
     </div>
   );
@@ -416,7 +410,7 @@ const orb = {
 const s = {
   page: {
     minHeight: "100vh",
-    background: "#060612",
+    background: "transparent",
     color: "#e2e8f0",
     fontFamily: "'Inter', sans-serif",
     position: "relative",
@@ -448,11 +442,11 @@ const s = {
   },
   logoIcon: { fontSize: 22, color: "#a78bfa", transform: "rotate(-15deg)" },
   logoText: {
-    fontSize: 22, fontWeight: 800,
-    background: "linear-gradient(90deg,#fff,#a78bfa)",
-    WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent",
-    fontFamily: "'Space Grotesk', sans-serif",
-    letterSpacing: "-0.03em",
+    fontSize: 20, fontWeight: 900,
+    color: "#fff",
+    fontFamily: "'Space Mono', monospace",
+    letterSpacing: "2px",
+    textTransform: "uppercase"
   },
   navRight: { display: "flex", alignItems: "center", gap: 12 },
 
@@ -583,7 +577,7 @@ const s = {
     fontWeight: 900, lineHeight: 1.05,
     letterSpacing: "-0.04em",
     color: "#fff",
-    fontFamily: "'Space Grotesk', sans-serif",
+    fontFamily: "'Space Mono', monospace",
     marginBottom: 28,
   },
   heroGradient: {
@@ -623,7 +617,10 @@ const s = {
     transition: "background 0.3s",
   },
   statIcon: { fontSize: 24, marginBottom: 16, filter: "drop-shadow(0 0 8px rgba(124,58,237,0.3))" },
-  statVal: { fontSize: 17, fontWeight: 800, color: "#fff", fontFamily: "'Space Grotesk',sans-serif", marginBottom: 4 },
+  statVal: { 
+    fontSize: 17, fontWeight: 800, color: "#fff", 
+    fontFamily: "'Space Mono', monospace", marginBottom: 4 
+  },
   statLabel: { fontSize: 11, color: "#475569", fontWeight: 700, textTransform: "uppercase", letterSpacing: "1px" },
 
   // MAIN
@@ -677,7 +674,10 @@ const s = {
     backdropFilter: "blur(20px)",
   },
   noWalletIcon: { fontSize: 64, marginBottom: 20, filter: "drop-shadow(0 0 20px rgba(124,58,237,0.3))" },
-  noWalletTitle: { fontSize: 22, fontWeight: 800, color: "#fff", marginBottom: 12, fontFamily: "'Space Grotesk', sans-serif" },
+  noWalletTitle: { 
+    fontSize: 22, fontWeight: 800, color: "#fff", 
+    marginBottom: 12, fontFamily: "'Space Mono', monospace" 
+  },
   noWalletSub: { fontSize: 14, color: "#64748b", marginBottom: 32, lineHeight: 1.5 },
   connectBtn2: {
     width: "100%", padding: "16px",
@@ -698,8 +698,8 @@ const s = {
   },
   footerLogo: {
     fontSize: 18, fontWeight: 800, color: "#fff",
-    fontFamily: "'Space Grotesk',sans-serif",
-    letterSpacing: "-0.02em",
+    fontFamily: "'Space Mono', monospace",
+    letterSpacing: "2px",
   },
   footerText: { fontSize: 12, color: "#334155", fontWeight: 600, textTransform: "uppercase", letterSpacing: "1px" },
 };
