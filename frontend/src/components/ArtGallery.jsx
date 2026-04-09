@@ -97,9 +97,26 @@ export default function ArtGallery({ contract }) {
       ) : (
         <div style={s.grid}>
           {artworks.map((art) => (
-            <div key={art.hash} style={s.card}>
+            <div
+  key={art.hash}
+  style={s.card}
+  onMouseEnter={(e) => {
+    e.currentTarget.style.transform = "scale(1.03)";
+    e.currentTarget.style.boxShadow = "0 10px 30px rgba(0,0,0,0.3)";
+  }}
+  onMouseLeave={(e) => {
+    e.currentTarget.style.transform = "scale(1)";
+    e.currentTarget.style.boxShadow = "none";
+  }}
+>
               <div style={s.imgWrapper}>
-                <img src={art.ipfsURI} alt={art.title} style={s.img} loading="lazy" />
+                <img src={art.ipfsURI ? art.ipfsURI.replace("ipfs://", "https://gateway.pinata.cloud/ipfs/")
+                  : "https://via.placeholder.com/300"
+                           }
+                              alt={art.title}
+                               style={s.img}
+                           loading="lazy"
+                                        />
                 <div style={s.overlay}>
                   {art.isGasless && <div style={s.gaslessBadge}>⚡ Gasless Optimization</div>}
                   <a 
@@ -161,14 +178,14 @@ const s = {
     gap: "24px",
   },
   card: {
-    background: "rgba(255,255,255,0.03)",
-    border: "1px solid rgba(255,255,255,0.08)",
-    borderRadius: "24px",
-    overflow: "hidden",
-    backdropFilter: "blur(10px)",
-    transition: "transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1)",
-    cursor: "pointer",
-  },
+  background: "rgba(255,255,255,0.03)",
+  border: "1px solid rgba(255,255,255,0.08)",
+  borderRadius: "24px",
+  overflow: "hidden",
+  backdropFilter: "blur(10px)",
+  transition: "all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1)",
+  cursor: "pointer",
+},
   imgWrapper: {
     position: "relative",
     aspectRatio: "4/3",
