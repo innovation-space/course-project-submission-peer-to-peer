@@ -24,38 +24,79 @@ const provider = new ethers.JsonRpcProvider(RPC_URL);
 const contract = new ethers.Contract(CONTRACT_ADDRESS, ArtRegistryABI, provider);
 
 /**
+ * 🔄 BLOCKCHAIN RE-SYNC / CATCH-UP
+ * Scans historical logs to ensure the database is in sync with the blockchain.
+ * Advanced logic: Handles events missed during server downtime.
+ */
+async function syncHistoricalEvents() {
+  console.log("🔍 Scanning for missed historical events...");
+  try {
+    const currentBlock = await provider.getBlockNumber();
+    const startBlock = currentBlock - 5000; // Scan last ~24 hours of activity
+    
+    const filter = contract.filters.ArtworkRegistered();
+    const logs = await contract.queryFilter(filter, startBlock, "latest");
+    
+    console.log(`📊 Found ${logs.length} historical events in the scan range.`);
+    
+    for (const log of logs) {
+      const { imageHash, owner, title } = log.args;
+      const existing = await Artwork.findOne({ imageHash });
+      
+      if (!existing || existing.isGasless) {
+        console.log(`♻️ Syncing missed artwork: ${title}`);
+        const chainData = await contract.verifyArtwork(imageHash);
+        
+        await Artwork.findOneAndUpdate(
+          { imageHash },
+          {
+            imageHash,
+            title: chainData.title,
+            artist: chainData.artist,
+            ipfsURI: chainData.ipfsURI,
+            owner: chainData.owner,
+            timestamp: Number(chainData.timestamp),
+            isGasless: false
+          },
+          { upsert: true }
+        );
+      }
+    }
+    console.log("✅ Historical sync complete.");
+  } catch (err) {
+    console.error("❌ Catch-up sync failed:", err.message);
+  }
+}
+
+/**
  * 🛰️ SECURE EVENT-DRIVEN SYNC
- * Requirement 3-6: Listens to smart contract events and verifies transactions.
  */
 async function startEventListener() {
   console.log(`📡 Connecting to Polygon (ChainID: ${EXPECTED_CHAIN_ID})...`);
   
   try {
     const network = await provider.getNetwork();
-    
-    // Requirement 7: Network check
     if (Number(network.chainId) !== EXPECTED_CHAIN_ID) {
-      console.warn(`⚠️ Warning: Provider is connected to ChainID ${network.chainId}, expected ${EXPECTED_CHAIN_ID}.`);
+      console.warn(`⚠️ Warning: Connected to ChainID ${network.chainId}, expected ${EXPECTED_CHAIN_ID}.`);
     }
 
-    console.log("🚀 Event Listener ACTIVE: Monitoring 'ArtworkRegistered'...");
+    // 1. Run historical sync first
+    await syncHistoricalEvents();
 
+    // 2. Start real-time listener
+    console.log("🚀 Event Listener ACTIVE: Monitoring 'ArtworkRegistered'...");
     contract.on("ArtworkRegistered", async (imageHash, owner, title, timestamp, event) => {
       console.log(`\n🔔 New Event Detected: ${title}`);
       console.log(`🔗 Transaction Hash: ${event.log.transactionHash}`);
 
       try {
-        // Requirement 5: Verify the transaction receipt
         const receipt = await provider.getTransactionReceipt(event.log.transactionHash);
-        
         if (!receipt || receipt.status !== 1) {
           console.error("❌ Transaction failed or status is not 1. Skipping sync.");
           return;
         }
 
-        // Requirement 9: Verify state directly from contract (Don't trust event logs alone)
         const chainData = await contract.verifyArtwork(imageHash);
-        
         const artworkData = {
           imageHash: imageHash,
           title: chainData.title,
@@ -66,7 +107,6 @@ async function startEventListener() {
           isGasless: false
         };
 
-        // Requirement 8: Prevent duplicate entries using upsert
         await Artwork.findOneAndUpdate(
           { imageHash: artworkData.imageHash },
           artworkData,
@@ -78,9 +118,8 @@ async function startEventListener() {
         console.error("❌ Verification Error:", err.message);
       }
     });
-
   } catch (err) {
-    console.error("❌ Failed to initialize blockchain provider:", err.message);
+    console.error("❌ Initialization failed:", err.message);
   }
 }
 
