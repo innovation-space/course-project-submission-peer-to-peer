@@ -128,6 +128,24 @@ VIT Vellore
 
 ---
 
+## 🏛️ Blockchain vs. Traditional Database (Justification)
+
+A common question is: *Why use a blockchain instead of a standard SQL/NoSQL database?* Here is the architectural justification:
+
+| Feature | Traditional Database (MongoDB) | Blockchain (Polygon) |
+| :--- | :--- | :--- |
+| **Trust** | Centralized. The admin can delete or modify records at any time. | Decentralized. No single entity can alter a record once it is mined. |
+| **Transparency** | Private. Users cannot verify if a record has been tampered with. | Public. Anyone can verify the timestamp and ownership on PolygonScan. |
+| **Persistence** | Data is lost if the server or company shuts down. | Immutable. The record lives as long as the Polygon network exists. |
+| **Cost** | Free/Low (Internal hosting). | Requires Gas (MATIC), though negligible on Polygon (~$0.01). |
+
+### **The Hybrid Solution (ArtChain)**
+ArtChain uses a **hybrid architecture** to provide the best of both worlds:
+1.  **Polygon (The Source of Truth):** Stores the `imageHash`, `owner`, and `timestamp`. This is the legally defensible proof of existence.
+2.  **MongoDB (The Performance Layer):** Syncs with the blockchain via a **Backend Listener** (Node.js + Ethers). It allows the frontend to load the gallery instantly without waiting for multiple RPC calls, while ensuring that the data displayed is verified against the chain.
+
+---
+
 ## 📜 License
 
 MIT
