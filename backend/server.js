@@ -9,70 +9,94 @@ const ArtRegistryABI = require("./ArtRegistryABI.json");
 const app = express();
 const PORT = process.env.PORT || 5000;
 
-// Configuration
-const RPC_URL = process.env.RPC_URL || "https://rpc-amoy.polygon.technology";
-const CONTRACT_ADDRESS = "0x9fE46736679d2D9a65F0992F2272dE9f3c7fa6e0"; // ArtRegistry on Amoy
+// ⚙️ CONFIGURATION
+const RPC_URL = process.env.RPC_URL || "https://polygon-rpc.com"; // Polygon Mainnet RPC
+const CONTRACT_ADDRESS = process.env.CONTRACT_ADDRESS || "0x9fE46736679d2D9a65F0992F2272dE9f3c7fa6e0"; 
+const EXPECTED_CHAIN_ID = 137; // Polygon Mainnet
 const MONGODB_URI = process.env.MONGODB_URI || "mongodb://localhost:27017/artchain";
 
 // Middleware
 app.use(cors());
 app.use(express.json());
 
-// Blockchain Setup
+// ⛓️ BLOCKCHAIN SETUP
 const provider = new ethers.JsonRpcProvider(RPC_URL);
 const contract = new ethers.Contract(CONTRACT_ADDRESS, ArtRegistryABI, provider);
 
 /**
- * 📡 Blockchain Event Listener
- * Listens for new artwork registrations on Polygon and syncs to MongoDB.
- * This is the primary "source of truth" to prevent spoofing.
+ * 🛰️ SECURE EVENT-DRIVEN SYNC
+ * Requirement 3-6: Listens to smart contract events and verifies transactions.
  */
 async function startEventListener() {
-  console.log("📡 Starting Blockchain Event Listener...");
+  console.log(`📡 Connecting to Polygon (ChainID: ${EXPECTED_CHAIN_ID})...`);
   
-  contract.on("ArtworkRegistered", async (imageHash, owner, title, timestamp, event) => {
-    console.log(`🔔 New On-Chain Artwork Detected: ${title} (Hash: ${imageHash})`);
+  try {
+    const network = await provider.getNetwork();
     
-    try {
-      // Fetch full details from contract (including fields not in event)
-      const data = await contract.verifyArtwork(imageHash);
-      
-      const artworkData = {
-        imageHash: imageHash,
-        title: data.title,
-        artist: data.artist,
-        ipfsURI: data.ipfsURI,
-        owner: data.owner,
-        timestamp: Number(data.timestamp),
-        isGasless: false
-      };
-
-      // Upsert to DB
-      await Artwork.findOneAndUpdate(
-        { imageHash: artworkData.imageHash },
-        artworkData,
-        { upsert: true, new: true }
-      );
-      
-      console.log(`✅ Successfully synced: ${artworkData.title}`);
-    } catch (err) {
-      console.error("❌ Error syncing artwork from event:", err.message);
+    // Requirement 7: Network check
+    if (Number(network.chainId) !== EXPECTED_CHAIN_ID) {
+      console.warn(`⚠️ Warning: Provider is connected to ChainID ${network.chainId}, expected ${EXPECTED_CHAIN_ID}.`);
     }
-  });
+
+    console.log("🚀 Event Listener ACTIVE: Monitoring 'ArtworkRegistered'...");
+
+    contract.on("ArtworkRegistered", async (imageHash, owner, title, timestamp, event) => {
+      console.log(`\n🔔 New Event Detected: ${title}`);
+      console.log(`🔗 Transaction Hash: ${event.log.transactionHash}`);
+
+      try {
+        // Requirement 5: Verify the transaction receipt
+        const receipt = await provider.getTransactionReceipt(event.log.transactionHash);
+        
+        if (!receipt || receipt.status !== 1) {
+          console.error("❌ Transaction failed or status is not 1. Skipping sync.");
+          return;
+        }
+
+        // Requirement 9: Verify state directly from contract (Don't trust event logs alone)
+        const chainData = await contract.verifyArtwork(imageHash);
+        
+        const artworkData = {
+          imageHash: imageHash,
+          title: chainData.title,
+          artist: chainData.artist,
+          ipfsURI: chainData.ipfsURI,
+          owner: chainData.owner,
+          timestamp: Number(chainData.timestamp),
+          isGasless: false
+        };
+
+        // Requirement 8: Prevent duplicate entries using upsert
+        await Artwork.findOneAndUpdate(
+          { imageHash: artworkData.imageHash },
+          artworkData,
+          { upsert: true, new: true }
+        );
+        
+        console.log(`✅ VERIFIED & STORED: ${artworkData.title}`);
+      } catch (err) {
+        console.error("❌ Verification Error:", err.message);
+      }
+    });
+
+  } catch (err) {
+    console.error("❌ Failed to initialize blockchain provider:", err.message);
+  }
 }
 
 // Database Connection
 mongoose.connect(MONGODB_URI)
   .then(() => {
     console.log("✅ MongoDB connected!");
-    startEventListener(); // Start listening after DB is ready
+    startEventListener();
   })
   .catch(err => console.error("❌ MongoDB connection error:", err));
 
-// Routes
+// 🛣️ ROUTES
 
 /**
- * 1. GET all artworks (Optimized for gallery speed)
+ * 1. GET /api/artworks
+ * Fast retrieval from verified MongoDB cache.
  */
 app.get("/api/artworks", async (req, res) => {
   try {
@@ -84,65 +108,49 @@ app.get("/api/artworks", async (req, res) => {
 });
 
 /**
- * 2. POST /api/artworks (SECURED Sync Endpoint)
- * Instead of trusting body data, we now verify the Transaction Hash or the Chain State.
+ * 2. POST /api/artworks
+ * Requirement 1 & 10: DISABLE direct writes for blockchain transactions.
+ * This API now only acknowledges submission; the listener handles the actual storage.
  */
 app.post("/api/artworks", async (req, res) => {
   try {
-    const { imageHash, title, artist, ipfsURI, owner, timestamp, isGasless, txHash } = req.body;
+    const { imageHash, isGasless, txHash } = req.body;
     
-    // 🛡️ SECURITY CHECK: If NOT gasless, we must verify the transaction exists on-chain
-    if (!isGasless) {
-      if (txHash) {
-        console.log(`🔍 Verifying transaction: ${txHash}`);
-        const receipt = await provider.getTransactionReceipt(txHash);
-        if (!receipt || receipt.status !== 1) {
-          return res.status(400).json({ error: "Invalid or failed transaction hash." });
-        }
-      }
+    // Handle Gasless (Local/Guest) mode separately (for demo purposes)
+    if (isGasless) {
+      const { title, artist, ipfsURI, owner, timestamp } = req.body;
+      const existing = await Artwork.findOne({ imageHash });
+      if (existing) return res.status(200).json(existing);
 
-      // Final check: Query the contract to ensure it's actually registered
-      const isRegistered = await contract.isRegistered(imageHash);
-      if (!isRegistered) {
-        return res.status(400).json({ error: "Artwork not found on blockchain. Spoofing attempt blocked." });
-      }
-
-      // Fetch official data from chain to override any spoofed body data
-      const chainData = await contract.verifyArtwork(imageHash);
-      const syncedArtwork = {
-        imageHash,
-        title: chainData.title,
-        artist: chainData.artist,
-        ipfsURI: chainData.ipfsURI,
-        owner: chainData.owner,
-        timestamp: Number(chainData.timestamp),
-        isGasless: false
-      };
-
-      const art = await Artwork.findOneAndUpdate({ imageHash }, syncedArtwork, { upsert: true, new: true });
-      return res.status(201).json(art);
+      const newArtwork = new Artwork({ imageHash, title, artist, ipfsURI, owner, timestamp, isGasless: true });
+      await newArtwork.save();
+      return res.status(201).json(newArtwork);
     }
 
-    // Handle Gasless (Guest/Local) artworks
-    let existing = await Artwork.findOne({ imageHash });
-    if (existing) return res.status(200).json(existing);
-
-    const newArtwork = new Artwork({
-      imageHash, title, artist, ipfsURI, owner, timestamp, isGasless
+    // Requirement 1 & 10: BLOCKCHAIN TRANSACTIONS
+    // We DO NOT store data here. We wait for the event listener to pick it up.
+    console.log(`📩 Sync request received for TX: ${txHash || "Pending"}`);
+    
+    res.status(202).json({
+      message: "Sync request accepted. Data will be persisted once verified on the Polygon network.",
+      status: "processing",
+      txHash: txHash
     });
 
-    await newArtwork.save();
-    console.log(`🌱 New Gasless artwork saved: ${title}`);
-    res.status(201).json(newArtwork);
   } catch (err) {
     res.status(400).json({ error: err.message });
   }
 });
 
 app.get("/", (req, res) => {
-  res.send("ArtChain API is Operational // STATUS: OK // LISTENER: ACTIVE");
+  res.send({
+    service: "ArtChain Security Layer",
+    status: "Operational",
+    network: "Polygon (ChainID 137)",
+    integrity: "Verified Event-Driven Architecture"
+  });
 });
 
 app.listen(PORT, () => {
-  console.log(`🚀 Server running on port ${PORT}`);
+  console.log(`🚀 Secure Backend running on port ${PORT}`);
 });
