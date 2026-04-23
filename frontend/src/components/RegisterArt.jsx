@@ -99,15 +99,17 @@ export default function RegisterArt({ contract, account, isGasless }) {
         setTxHash(tx.hash);
         setStatus("✅ Artwork registered on Polygon!");
 
-        // Sync with Backend
+        // Sync with Backend (Secure Verification)
         try {
           await fetch("http://localhost:5000/api/artworks", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ 
               imageHash, title, artist, ipfsURI, 
-              owner: account, timestamp: Math.floor(Date.now() / 1000),
-              isGasless: false 
+              owner: account, 
+              timestamp: Math.floor(Date.now() / 1000),
+              isGasless: false,
+              txHash: tx.hash // 🛡️ Added for backend verification
             })
           });
         } catch (e) {
