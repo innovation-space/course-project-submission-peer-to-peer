@@ -2,59 +2,71 @@ require("dotenv").config();
 const express = require("express");
 const mongoose = require("mongoose");
 const cors = require("cors");
+const { ethers } = require("ethers");
 const Artwork = require("./models/Artwork");
+const ArtRegistryABI = require("./ArtRegistryABI.json");
 
 const app = express();
 const PORT = process.env.PORT || 5000;
 
-// Middleware
+const RPC_URL = process.env.RPC_URL || "https://polygon-rpc.com"; 
+const CONTRACT_ADDRESS = process.env.CONTRACT_ADDRESS || "0x9fE46736679d2D9a65F0992F2272dE9f3c7fa6e0"; 
+const EXPECTED_CHAIN_ID = 137; 
+const MONGODB_URI = process.env.MONGODB_URI || "mongodb://localhost:27017/artchain";
+
 app.use(cors());
 app.use(express.json());
 
-// Database Connection
-const MONGODB_URI = process.env.MONGODB_URI || "mongodb://localhost:27017/artchain";
+const provider = new ethers.JsonRpcProvider(RPC_URL);
+const contract = new ethers.Contract(CONTRACT_ADDRESS, ArtRegistryABI, provider);
 
-mongoose.connect(MONGODB_URI)
-  .then(() => console.log("✅ MongoDB connected!"))
-  .catch(err => console.error("❌ MongoDB connection error:", err));
+async function syncHistoricalEvents() {
+  try {
+    const currentBlock = await provider.getBlockNumber();
+    const startBlock = currentBlock - 5000; 
+    const filter = contract.filters.ArtworkRegistered();
+    const logs = await contract.queryFilter(filter, startBlock, "latest");
+    for (const log of logs) {
+      const { imageHash, title } = log.args;
+      const existing = await Artwork.findOne({ imageHash });
+      if (!existing || existing.isGasless) {
+        const data = await contract.verifyArtwork(imageHash);
+        await Artwork.findOneAndUpdate({ imageHash }, {
+          imageHash, title: data.title, artist: data.artist, ipfsURI: data.ipfsURI, owner: data.owner, timestamp: Number(data.timestamp), isGasless: false
+        }, { upsert: true });
+      }
+    }
+  } catch (err) { console.error(err); }
+}
 
-// Routes
-// 1. GET all artworks (fast loading)
+async function startEventListener() {
+  await syncHistoricalEvents();
+  contract.on("ArtworkRegistered", async (imageHash, owner, title, timestamp, event) => {
+    const receipt = await provider.getTransactionReceipt(event.log.transactionHash);
+    if (receipt && receipt.status === 1) {
+      const data = await contract.verifyArtwork(imageHash);
+      await Artwork.findOneAndUpdate({ imageHash }, {
+        imageHash, title: data.title, artist: data.artist, ipfsURI: data.ipfsURI, owner: data.owner, timestamp: Number(data.timestamp), isGasless: false
+      }, { upsert: true });
+    }
+  });
+}
+
+mongoose.connect(MONGODB_URI).then(() => { startEventListener(); });
+
 app.get("/api/artworks", async (req, res) => {
-  try {
-    const artworks = await Artwork.find().sort({ createdAt: -1 });
-    res.json(artworks);
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
+  const artworks = await Artwork.find().sort({ createdAt: -1 });
+  res.json(artworks);
 });
 
-// 2. POST a new artwork (sync from blockchain/FE)
 app.post("/api/artworks", async (req, res) => {
-  try {
-    const { imageHash, title, artist, ipfsURI, owner, timestamp, isGasless } = req.body;
-    
-    // Check if already exists
-    let existing = await Artwork.findOne({ imageHash });
-    if (existing) return res.status(200).json(existing);
-
-    const newArtwork = new Artwork({
-      imageHash, title, artist, ipfsURI, owner, timestamp, isGasless
-    });
-
-    await newArtwork.save();
-    console.log(`🖼️ New artwork synced: ${title}`);
-    res.status(201).json(newArtwork);
-  } catch (err) {
-    res.status(400).json({ error: err.message });
+  const { imageHash, isGasless } = req.body;
+  if (isGasless) {
+    const art = new Artwork(req.body);
+    await art.save();
+    return res.status(201).json(art);
   }
+  res.status(202).json({ message: "Awaiting on-chain verification @manoov" });
 });
 
-// 3. Health check
-app.get("/", (req, res) => {
-  res.send("ArtChain API is Operational // STATUS: OK");
-});
-
-app.listen(PORT, () => {
-  console.log(`🚀 Server running on port ${PORT}`);
-});
+app.listen(PORT);
