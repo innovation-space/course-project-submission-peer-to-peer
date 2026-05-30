@@ -110,6 +110,72 @@ export default function App() {
     }
   }, []);
 
+  // ── Auto-reconnect wallet on page reload ──
+  useEffect(() => {
+    const autoReconnect = async () => {
+      // Only attempt if user previously connected and MetaMask is available
+      if (!window.ethereum) return;
+      if (localStorage.getItem("ARTCHAIN_WALLET_CONNECTED") !== "true") return;
+
+      try {
+        // eth_accounts is passive — no popup, just returns already-permitted accounts
+        const accounts = await window.ethereum.request({ method: "eth_accounts" });
+        if (accounts.length > 0) {
+          const provider = new ethers.BrowserProvider(window.ethereum);
+          const signer = await provider.getSigner();
+          const addr = await signer.getAddress();
+          const ct = new ethers.Contract(CONTRACT_ADDRESS, ART_REGISTRY_ABI, signer);
+          setAccount(addr);
+          setContract(ct);
+        }
+      } catch (err) {
+        console.warn("Auto-reconnect failed:", err.message);
+        // Don't annoy the user — silently fail
+      }
+    };
+    autoReconnect();
+  }, []);
+
+  // ── MetaMask event listeners: account & chain changes ──
+  useEffect(() => {
+    if (!window.ethereum) return;
+
+    const handleAccountsChanged = async (accounts) => {
+      if (accounts.length === 0) {
+        // User disconnected from MetaMask
+        setAccount(null);
+        setContract(null);
+        setIsGuest(false);
+        localStorage.removeItem("ARTCHAIN_WALLET_CONNECTED");
+      } else {
+        // User switched account — re-initialize
+        try {
+          const provider = new ethers.BrowserProvider(window.ethereum);
+          const signer = await provider.getSigner();
+          const addr = await signer.getAddress();
+          const ct = new ethers.Contract(CONTRACT_ADDRESS, ART_REGISTRY_ABI, signer);
+          setAccount(addr);
+          setContract(ct);
+        } catch (err) {
+          console.warn("Account switch failed:", err.message);
+        }
+      }
+    };
+
+    const handleChainChanged = () => {
+      // Safest approach: reload the page so provider/signer are fresh
+      window.location.reload();
+    };
+
+    window.ethereum.on("accountsChanged", handleAccountsChanged);
+    window.ethereum.on("chainChanged", handleChainChanged);
+
+    return () => {
+      window.ethereum.removeListener("accountsChanged", handleAccountsChanged);
+      window.ethereum.removeListener("chainChanged", handleChainChanged);
+    };
+  }, []);
+
   const connectWallet = async () => {
     if (!window.ethereum) return alert("Please install MetaMask!");
     setConnecting(true);
@@ -121,10 +187,20 @@ export default function App() {
       const ct = new ethers.Contract(CONTRACT_ADDRESS, ART_REGISTRY_ABI, signer);
       setAccount(addr);
       setContract(ct);
+      // Remember connection for auto-reconnect on reload
+      localStorage.setItem("ARTCHAIN_WALLET_CONNECTED", "true");
     } catch (err) {
       alert("Failed to connect: " + err.message);
     }
     setConnecting(false);
+  };
+
+  const disconnectWallet = () => {
+    setAccount(null);
+    setContract(null);
+    setIsGuest(false);
+    setIsGasless(false);
+    localStorage.removeItem("ARTCHAIN_WALLET_CONNECTED");
   };
 
   const connectGuest = () => {
@@ -221,6 +297,13 @@ export default function App() {
                 <span style={s.walletAddr}>
                   {account.slice(0, 6)}…{account.slice(-4)}
                 </span>
+                <button
+                  style={s.disconnectBtn}
+                  onClick={disconnectWallet}
+                  title="Disconnect wallet"
+                >
+                  ✕
+                </button>
               </div>
             ) : (
               <button style={s.connectBtn} onClick={connectWallet} disabled={connecting}>
@@ -466,6 +549,12 @@ const s = {
     display: "inline-block",
   },
   walletAddr: { fontSize: 13, fontWeight: 700, color: "#10b981", fontFamily: "monospace" },
+  disconnectBtn: {
+    background: "none", border: "none",
+    color: "rgba(255,255,255,0.3)", fontSize: 14, fontWeight: 700,
+    cursor: "pointer", padding: "0 0 0 4px",
+    lineHeight: 1, transition: "color 0.2s",
+  },
 
   connectBtn: {
     display: "flex", alignItems: "center", gap: 8,
